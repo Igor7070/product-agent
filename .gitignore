@@ -1,0 +1,15 @@
+# Зависимости фронтенда и кэш Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Виртуальное окружение бэкенда и кэш Python
+my_fastapi_app/venv/
+my_fastapi_app/.venv/
+my_fastapi_app/__pycache__/
+my_fastapi_app/*.pyc
+
+# Секретные файлы (токены, ключи), если появятся
+.env
+*.env.local
+.DS_Store
