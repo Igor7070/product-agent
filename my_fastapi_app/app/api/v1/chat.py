@@ -1,12 +1,13 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 import shutil
 import os
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.core.database import get_db
-from app.models.chat import ChatMessage
+from app.models.chat import Conversation, ChatMessage
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -18,18 +19,6 @@ class ChatResponse(BaseModel):
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Сессии по conversation_id (чтобы каждый чат был независимым)
-active_sessions = {}
-
-def get_or_create_session(conversation_id: str):
-    if conversation_id not in active_sessions:
-        active_sessions[conversation_id] = {
-            "step": 0,
-            "data": {}
-        }
-    return active_sessions[conversation_id]
-
-
 @router.post("/")
 async def chat_with_stylist(
     message: str = Form(""),
@@ -40,11 +29,26 @@ async def chat_with_stylist(
     user_id = "default_user"
     user_msg = message.strip()
 
-    # Получаем сессию для конкретного чата
-    session = get_or_create_session(conversation_id)
+    try:
+        conv_id = int(conversation_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Неверный conversation_id")
+
+    # Получаем conversation
+    result = await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )
+    conv = result.scalar_one_or_none()
+
+    if not conv:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+
+    # === ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ ===
+    print(f"[DEBUG] Загружено состояние для чата {conv_id}: {conv.state}")  # ← отладка
+
+    session = dict(conv.state) if conv.state else {"step": 0, "data": {}}
     saved_image_paths = []
 
-    # Сохранение фото
     if files:
         for file in files:
             if file.filename:
@@ -55,11 +59,13 @@ async def chat_with_stylist(
                     shutil.copyfileobj(file.file, buffer)
                 saved_image_paths.append(f"/uploads/{filename}")
 
-    # === Логика диалога ===
-    step = session["step"]
-    data = session["data"]
+    step = session.get("step", 0)
+    data = session.get("data", {})
     response = ""
 
+    print(f"[DEBUG] Текущий шаг перед обработкой: {step}")  # ← отладка
+
+    # === ЛОГИКА ДИАЛОГА ===
     if step == 0:
         name = user_msg if user_msg else "друг"
         data["name"] = name
@@ -73,7 +79,7 @@ async def chat_with_stylist(
 
     elif step == 2:
         data["budget"] = user_msg
-        response = "Поняла. Расскажи о своей фигуре: рост, размер одежды, особенности..."
+        response = "Поняла. Расскажи о своей фигуре: рост, размер одежды, особенности, что хочешь подчеркнуть или скрыть?"
         session["step"] = 3
 
     elif step == 3:
@@ -89,7 +95,7 @@ async def chat_with_stylist(
     elif step == 5:
         if saved_image_paths:
             response = f"Фото успешно загружено ({len(saved_image_paths)} шт.)! Спасибо."
-        elif any(word in user_msg.lower() for word in ["пропустить", "нет", "skip", "не надо"]):
+        elif any(word in (user_msg or "").lower() for word in ["пропустить", "нет", "skip", "не надо"]):
             response = "Хорошо, продолжим без фото."
         else:
             response = "Жду твои фото!"
@@ -105,8 +111,15 @@ async def chat_with_stylist(
     else:
         response = "Поняла. Что делаем дальше?"
 
-    # === Сохранение в базу данных ===
+    # === СОХРАНЕНИЕ СОСТОЯНИЯ ===
+    conv.state = session
+    conv.updated_at = datetime.utcnow()
+
+    print(f"[DEBUG] Сохраняем новое состояние: step={session.get('step')}")  # ← отладка
+
+    # Сохранение сообщений
     user_msg_db = ChatMessage(
+        conversation_id=conv_id,
         user_id=user_id,
         role="user",
         content=user_msg,
@@ -115,6 +128,7 @@ async def chat_with_stylist(
     db.add(user_msg_db)
 
     assistant_msg_db = ChatMessage(
+        conversation_id=conv_id,
         user_id=user_id,
         role="assistant",
         content=response,
@@ -123,6 +137,7 @@ async def chat_with_stylist(
     db.add(assistant_msg_db)
 
     await db.commit()
+    await db.refresh(conv)  # обновляем объект после commit
 
     return ChatResponse(
         role="assistant", 

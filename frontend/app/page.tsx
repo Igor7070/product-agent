@@ -13,21 +13,22 @@ interface Conversation {
   title: string;
   last_message: string;
   updated_at: string;
+  state?: any;
 }
+
+const DEFAULT_WELCOME = 'Привет! 👋 Я Анна — твой персональный AI-стилист. Давай создадим идеальный гардероб вместе. Как тебя зовут?';
 
 export default function AIStylist() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState(Date.now().toString());
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: 'Привет! 👋 Я Анна — твой персональный AI-стилист. Давай создадим идеальный гардероб вместе. Как тебя зовут?'
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // Для контекстного меню
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; convId: number } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -51,41 +52,66 @@ export default function AIStylist() {
         console.error("Не удалось загрузить список чатов:", error);
       }
     };
-
     loadConversations();
   }, []);
 
-  // Загрузка конкретного чата
-  const loadConversation = async (convId: string) => {
+  // Восстановление последнего чата после перезагрузки
+  useEffect(() => {
+    const savedId = localStorage.getItem('activeConversationId');
+    if (savedId) {
+      const id = parseInt(savedId);
+      loadConversation(id);
+    }
+  }, []);
+
+  // Если список загрузился и нет активного чата
+  useEffect(() => {
+    if (conversations.length > 0 && activeConversationId === null) {
+      const savedId = localStorage.getItem('activeConversationId');
+      if (savedId) {
+        const id = parseInt(savedId);
+        const exists = conversations.some(c => c.id === id);
+        loadConversation(exists ? id : conversations[0].id);
+      } else {
+        loadConversation(conversations[0].id);
+      }
+    }
+  }, [conversations]);
+
+  const loadConversation = async (convId: number) => {
     try {
       setActiveConversationId(convId);
+      localStorage.setItem('activeConversationId', convId.toString());
+
       const res = await fetch(`http://127.0.0.1:8000/conversations/${convId}`);
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
-      
-      setMessages(data.messages.map((m: any) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-        images: m.images
-      })));
+
+      if (data.messages && data.messages.length > 0) {
+        setMessages(data.messages.map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          images: m.images
+        })));
+      } else {
+        setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
+      }
     } catch (error) {
       console.error("Не удалось загрузить чат:", error);
+      setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
     }
   };
 
   const createNewChat = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/conversations/', {
-        method: 'POST',
-      });
+      const res = await fetch('http://127.0.0.1:8000/conversations/', { method: 'POST' });
       const newConv = await res.json();
       
-      const newId = newConv.id.toString();
+      const newId = newConv.id;
       setActiveConversationId(newId);
-      setMessages([{
-        role: 'assistant',
-        content: 'Привет! 👋 Я Анна — твой персональный AI-стилист. Давай создадим идеальный гардероб вместе. Как тебя зовут?'
-      }]);
+      localStorage.setItem('activeConversationId', newId.toString());
+
+      setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
       setInput('');
       setSelectedFiles([]);
     } catch (e) {
@@ -94,8 +120,41 @@ export default function AIStylist() {
     }
   };
 
+  // Контекстное меню
+  const handleContextMenu = (e: React.MouseEvent, convId: number) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, convId });
+  };
+
+  const deleteConversation = async (convId: number) => {
+    if (!confirm("Удалить этот чат навсегда?")) return;
+
+    try {
+      await fetch(`http://127.0.0.1:8000/conversations/${convId}`, {
+        method: 'DELETE',
+      });
+
+      setConversations(prev => prev.filter(c => c.id !== convId));
+
+      if (activeConversationId === convId) {
+        createNewChat();
+      }
+
+      setContextMenu(null);
+    } catch (error) {
+      alert("Не удалось удалить чат");
+    }
+  };
+
+  // Закрытие меню при клике вне его
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   const handleSend = async () => {
-    if (loading || (!input.trim() && selectedFiles.length === 0)) return;
+    if (loading || (!input.trim() && selectedFiles.length === 0) || activeConversationId === null) return;
 
     const userMessage: Message = { 
       role: 'user', 
@@ -110,7 +169,7 @@ export default function AIStylist() {
 
     const formData = new FormData();
     formData.append('message', currentInput || 'Отправляю фото');
-    formData.append('conversation_id', activeConversationId);
+    formData.append('conversation_id', activeConversationId.toString());
 
     selectedFiles.forEach(file => formData.append('files', file));
 
@@ -128,9 +187,10 @@ export default function AIStylist() {
         images: data.images 
       }]);
     } catch (error) {
+      console.error(error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'Извини, что-то пошло не так с соединением. Попробуй ещё раз.' 
+        content: 'Извини, ошибка соединения.' 
       }]);
     } finally {
       setLoading(false);
@@ -171,7 +231,6 @@ export default function AIStylist() {
             </ul>
           </div>
 
-          {/* Новый чат и история */}
           <div className="mt-8 pt-6 border-t border-zinc-800">
             <button
               onClick={createNewChat}
@@ -185,14 +244,16 @@ export default function AIStylist() {
               {conversations.map(conv => (
                 <div 
                   key={conv.id} 
-                  onClick={() => loadConversation(conv.id.toString())}
-                  className={`p-3 rounded-xl cursor-pointer transition ${
-                    activeConversationId === conv.id.toString() 
+                  onClick={() => loadConversation(conv.id)}
+                  onContextMenu={(e) => handleContextMenu(e, conv.id)}
+                  className={`p-3 rounded-xl cursor-pointer transition relative group ${
+                    activeConversationId === conv.id 
                       ? 'bg-pink-600' 
                       : 'bg-zinc-800/50 hover:bg-zinc-800'
                   }`}
                 >
                   {conv.title}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-zinc-400">⋮</div>
                 </div>
               ))}
             </div>
@@ -270,6 +331,21 @@ export default function AIStylist() {
           </div>
         </div>
       </div>
+
+      {/* Контекстное меню */}
+      {contextMenu && (
+        <div 
+          className="fixed bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1 z-50 w-48 text-sm"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => deleteConversation(contextMenu.convId)}
+            className="w-full text-left px-4 py-2.5 text-red-400 hover:bg-zinc-800 flex items-center gap-2"
+          >
+            🗑 Удалить чат
+          </button>
+        </div>
+      )}
     </div>
   );
 }
