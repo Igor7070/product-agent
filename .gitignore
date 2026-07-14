@@ -13,6 +13,3 @@ my_fastapi_app/*.pyc
 .env
 *.env.local
 .DS_Store
-
-# Игнорируем загружаемые картинки в бэкенде
-my_fastapi_app/uploads/
