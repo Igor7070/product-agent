@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
+/*const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';*/
+const API_BASE = 'https://perfect-flexibility-production-2fbc.up.railway.app';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -29,6 +30,7 @@ export default function AIStylist() {
   const [loading, setLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
+  // Для контекстного меню
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; convId: number } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -121,6 +123,7 @@ export default function AIStylist() {
     }
   };
 
+  // Контекстное меню
   const handleContextMenu = (e: React.MouseEvent, convId: number) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, convId });
@@ -146,6 +149,7 @@ export default function AIStylist() {
     }
   };
 
+  // Закрытие меню при клике вне его
   useEffect(() => {
     const handleClickOutside = () => setContextMenu(null);
     document.addEventListener('click', handleClickOutside);
