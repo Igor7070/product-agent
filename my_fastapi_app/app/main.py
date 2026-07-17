@@ -1,11 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
-import uvicorn
 import os
-
-load_dotenv()
 
 app = FastAPI(
     title="Product Search AI Agent",
@@ -13,29 +9,30 @@ app = FastAPI(
     description="AI агент — персональный стилист"
 )
 
-# Настройка CORS
+# ==================== CORS ====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],                    # На продакшене потом заменим на конкретные домены
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем роутеры
+# ==================== РОУТЕРЫ ====================
 from app.api.v1.search import router as search_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.conversations import router as conversations_router
 
-app.include_router(search_router)
-app.include_router(chat_router)
-app.include_router(conversations_router)   # ← только один раз!
+app.include_router(search_router, prefix="/search", tags=["search"])
+app.include_router(chat_router, prefix="/chat", tags=["chat"])
+app.include_router(conversations_router, prefix="/conversations", tags=["conversations"])
 
-# Монтируем папку uploads
+# ==================== STATIC FILES (фото) ====================
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+# ==================== БАЗОВЫЕ ЭНДПОИНТЫ ====================
 @app.get("/")
 async def root():
     return {
@@ -48,11 +45,7 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-# Запуск сервера
+# ==================== ЗАПУСК (только для локальной разработки) ====================
 if __name__ == "__main__":
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
