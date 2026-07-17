@@ -1,17 +1,17 @@
-from logging.config import fileConfig
-from sqlalchemy import pool
-from alembic import context
 import asyncio
+import os
+from logging.config import fileConfig
 
-# Импорт настроек и моделей
-from app.core.config import settings
+from sqlalchemy import pool
+from sqlalchemy.ext.asyncio import create_async_engine
+
+from alembic import context
+
+# ====================== ИМПОРТЫ ======================
+from app.core.config import settings  # или где у тебя DATABASE_URL
 from app.models.base import Base
-from app.models.user import UserProfile
-from app.models.chat import ChatMessage
 
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-# Alembic Config
+# ====================== ALEMBIC CONFIG ======================
 config = context.config
 
 # Логирование
@@ -20,6 +20,7 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# ====================== OFFLINE MODE ======================
 def run_migrations_offline() -> None:
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
@@ -33,10 +34,18 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+# ====================== ONLINE MODE (ASYNC) ======================
 async def run_async_migrations():
+    # Важно: преобразуем URL под asyncpg
+    database_url = settings.DATABASE_URL if hasattr(settings, 'DATABASE_URL') else os.getenv("DATABASE_URL")
+    
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
     connectable = create_async_engine(
-        settings.DATABASE_URL,
+        database_url,
         poolclass=pool.NullPool,
+        echo=False,
     )
 
     async with connectable.connect() as connection:
@@ -48,7 +57,8 @@ async def run_async_migrations():
 def do_run_migrations(connection):
     context.configure(
         connection=connection,
-        target_metadata=target_metadata
+        target_metadata=target_metadata,
+        compare_type=True,
     )
 
     with context.begin_transaction():
@@ -59,6 +69,7 @@ def run_migrations_online():
     asyncio.run(run_async_migrations())
 
 
+# ====================== ЗАПУСК ======================
 if context.is_offline_mode():
     run_migrations_offline()
 else:
