@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -44,7 +46,7 @@ export default function AIStylist() {
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/conversations/');
+        const res = await fetch(`${API_BASE}/conversations/`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         setConversations(data);
@@ -83,7 +85,7 @@ export default function AIStylist() {
       setActiveConversationId(convId);
       localStorage.setItem('activeConversationId', convId.toString());
 
-      const res = await fetch(`http://127.0.0.1:8000/conversations/${convId}`);
+      const res = await fetch(`${API_BASE}/conversations/${convId}`);
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
 
@@ -104,7 +106,7 @@ export default function AIStylist() {
 
   const createNewChat = async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/conversations/', { method: 'POST' });
+      const res = await fetch(`${API_BASE}/conversations/`, { method: 'POST' });
       const newConv = await res.json();
       
       const newId = newConv.id;
@@ -130,7 +132,7 @@ export default function AIStylist() {
     if (!confirm("Удалить этот чат навсегда?")) return;
 
     try {
-      await fetch(`http://127.0.0.1:8000/conversations/${convId}`, {
+      await fetch(`${API_BASE}/conversations/${convId}`, {
         method: 'DELETE',
       });
 
@@ -174,7 +176,7 @@ export default function AIStylist() {
     selectedFiles.forEach(file => formData.append('files', file));
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/chat/', {
+      const response = await fetch(`${API_BASE}/chat/`, {
         method: 'POST',
         body: formData,
       });
@@ -282,7 +284,7 @@ export default function AIStylist() {
                   {msg.images && msg.images.length > 0 && (
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       {msg.images.map((imgPath, i) => (
-                        <img key={i} src={`http://127.0.0.1:8000${imgPath}`} alt="" className="rounded-xl max-h-48 object-cover" />
+                        <img key={i} src={`${API_BASE}${imgPath}`} alt="" className="rounded-xl max-h-48 object-cover" />
                       ))}
                     </div>
                   )}
