@@ -9,7 +9,8 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+# Здесь НЕ должно быть prefix="/chat" — он уже добавляется в main.py
+router = APIRouter(tags=["chat"])
 
 class ChatResponse(BaseModel):
     role: str
@@ -18,6 +19,7 @@ class ChatResponse(BaseModel):
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @router.post("/")
 async def chat_with_stylist(
@@ -44,10 +46,10 @@ async def chat_with_stylist(
         raise HTTPException(status_code=404, detail="Чат не найден")
 
     # === ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ ===
-    print(f"[DEBUG] Загружено состояние для чата {conv_id}: {conv.state}")  # ← отладка
+    print(f"[DEBUG] Загружено состояние для чата {conv_id}: {conv.state}")
 
     session = dict(conv.state) if conv.state else {"step": 0, "data": {}}
-    saved_image_paths = []
+    saved_image_paths: List[str] = []
 
     if files:
         for file in files:
@@ -63,7 +65,7 @@ async def chat_with_stylist(
     data = session.get("data", {})
     response = ""
 
-    print(f"[DEBUG] Текущий шаг перед обработкой: {step}")  # ← отладка
+    print(f"[DEBUG] Текущий шаг перед обработкой: {step}")
 
     # === ЛОГИКА ДИАЛОГА ===
     if step == 0:
@@ -115,7 +117,7 @@ async def chat_with_stylist(
     conv.state = session
     conv.updated_at = datetime.utcnow()
 
-    print(f"[DEBUG] Сохраняем новое состояние: step={session.get('step')}")  # ← отладка
+    print(f"[DEBUG] Сохраняем новое состояние: step={session.get('step')}")
 
     # Сохранение сообщений
     user_msg_db = ChatMessage(
@@ -137,7 +139,7 @@ async def chat_with_stylist(
     db.add(assistant_msg_db)
 
     await db.commit()
-    await db.refresh(conv)  # обновляем объект после commit
+    await db.refresh(conv)
 
     return ChatResponse(
         role="assistant", 
