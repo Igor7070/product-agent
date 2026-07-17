@@ -6,7 +6,8 @@ from typing import List
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
 
-router = APIRouter(prefix="/conversations", tags=["conversations"])
+# Здесь НЕ должно быть prefix!
+router = APIRouter(tags=["conversations"])
 
 @router.get("/")
 async def get_conversations(db: AsyncSession = Depends(get_db)):
@@ -21,12 +22,10 @@ async def get_conversations(db: AsyncSession = Depends(get_db)):
         
         chat_list = []
         for c in convs:
-            # Показываем только чаты, где пользователь уже написал хотя бы одно сообщение
             user_messages = [m for m in c.messages if m.role == "user"]
             if not user_messages:
-                continue  # пропускаем полностью пустые чаты
+                continue
 
-            # Улучшенное название чата
             title = c.title
             if title.startswith("Новый чат") and user_messages:
                 first_msg = user_messages[0].content.strip()
@@ -64,7 +63,7 @@ async def create_conversation(db: AsyncSession = Depends(get_db)):
 
 @router.get("/{conversation_id}")
 async def get_conversation(conversation_id: int, db: AsyncSession = Depends(get_db)):
-    """Загрузить чат по ID (сообщения + состояние)"""
+    """Загрузить чат по ID"""
     try:
         result = await db.execute(
             select(Conversation)
@@ -98,11 +97,11 @@ async def get_conversation(conversation_id: int, db: AsyncSession = Depends(get_
         print("Ошибка загрузки чата:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.delete("/{conversation_id}")
 async def delete_conversation(conversation_id: int, db: AsyncSession = Depends(get_db)):
-    """Удалить чат полностью"""
+    """Удалить чат"""
     try:
-        # Проверяем существование
         result = await db.execute(
             select(Conversation).where(Conversation.id == conversation_id)
         )
@@ -111,7 +110,6 @@ async def delete_conversation(conversation_id: int, db: AsyncSession = Depends(g
         if not conv:
             raise HTTPException(status_code=404, detail="Чат не найден")
 
-        # Удаляем чат (каскадно удалятся и сообщения благодаря ForeignKey)
         await db.delete(conv)
         await db.commit()
 
