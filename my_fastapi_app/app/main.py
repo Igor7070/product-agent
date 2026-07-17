@@ -9,10 +9,17 @@ app = FastAPI(
     description="AI агент — персональный стилист"
 )
 
-# ==================== CORS ====================
+# ==================== CORS (обновлено для Vercel + Railway) ====================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],                    # На продакшене потом заменим на конкретные домены
+    allow_origins=[
+        "http://localhost:3000",
+        "https://*.vercel.app",           # все проекты на Vercel
+        "https://product-agent-silk.vercel.app",   # твой конкретный домен
+        "https://product-agent-dnutb9v22-igor707070.vercel.app",
+        "https://perfect-flexibility-production-2fbc.up.railway.app",  # бэкенд
+        "*"                               # временно оставляем для удобства
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
