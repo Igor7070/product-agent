@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useSession, signIn, signOut } from "next-auth/react";
 
-/*const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';*/
 const API_BASE = 'https://perfect-flexibility-production-2fbc.up.railway.app';
 
 interface Message {
@@ -22,6 +22,8 @@ interface Conversation {
 const DEFAULT_WELCOME = 'Привет! 👋 Я Анна — твой персональный AI-стилист. Давай создадим идеальный гардероб вместе. Как тебя зовут?';
 
 export default function AIStylist() {
+  const { data: session, status } = useSession();
+
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
 
@@ -30,7 +32,6 @@ export default function AIStylist() {
   const [loading, setLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
-  // Для контекстного меню
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; convId: number } | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,7 +44,7 @@ export default function AIStylist() {
     scrollToBottom();
   }, [messages]);
 
-  // Загрузка списка чатов
+  // Загрузка списка чатов (пока без user_id — добавим позже)
   useEffect(() => {
     const loadConversations = async () => {
       try {
@@ -58,7 +59,7 @@ export default function AIStylist() {
     loadConversations();
   }, []);
 
-  // Восстановление последнего чата после перезагрузки
+  // Восстановление последнего чата
   useEffect(() => {
     const savedId = localStorage.getItem('activeConversationId');
     if (savedId) {
@@ -67,7 +68,6 @@ export default function AIStylist() {
     }
   }, []);
 
-  // Если список загрузился и нет активного чата
   useEffect(() => {
     if (conversations.length > 0 && activeConversationId === null) {
       const savedId = localStorage.getItem('activeConversationId');
@@ -123,7 +123,6 @@ export default function AIStylist() {
     }
   };
 
-  // Контекстное меню
   const handleContextMenu = (e: React.MouseEvent, convId: number) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, convId });
@@ -133,9 +132,7 @@ export default function AIStylist() {
     if (!confirm("Удалить этот чат навсегда?")) return;
 
     try {
-      await fetch(`${API_BASE}/conversations/${convId}`, {
-        method: 'DELETE',
-      });
+      await fetch(`${API_BASE}/conversations/${convId}`, { method: 'DELETE' });
 
       setConversations(prev => prev.filter(c => c.id !== convId));
 
@@ -149,7 +146,6 @@ export default function AIStylist() {
     }
   };
 
-  // Закрытие меню при клике вне его
   useEffect(() => {
     const handleClickOutside = () => setContextMenu(null);
     document.addEventListener('click', handleClickOutside);
@@ -223,6 +219,31 @@ export default function AIStylist() {
             </p>
           </div>
 
+          {/* === БЛОК АВТОРИЗАЦИИ === */}
+          <div className="mb-6">
+            {status === "loading" ? (
+              <div className="text-center text-zinc-400">Загрузка...</div>
+            ) : session ? (
+              <div className="bg-zinc-800 rounded-2xl p-4 text-center">
+                <p className="text-sm text-green-400">✅ {session.user?.name}</p>
+                <button
+                  onClick={() => signOut()}
+                  className="mt-2 text-xs text-red-400 hover:text-red-500 underline"
+                >
+                  Выйти
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => signIn("google")}
+                className="w-full bg-white text-black py-3 rounded-2xl font-medium flex items-center justify-center gap-3 hover:bg-zinc-100 transition"
+              >
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                Войти через Google
+              </button>
+            )}
+          </div>
+
           <div className="mt-auto">
             <h3 className="uppercase text-xs tracking-widest text-zinc-500 mb-4">Что я умею</h3>
             <ul className="space-y-4 text-sm">
@@ -263,7 +284,7 @@ export default function AIStylist() {
           </div>
         </div>
 
-        {/* Чат */}
+        {/* Чат — остальная часть без изменений */}
         <div className="flex-1 flex flex-col">
           <div className="p-6 border-b border-zinc-800 flex items-center gap-4 bg-zinc-950">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-pink-500">
