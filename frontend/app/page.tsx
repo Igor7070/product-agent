@@ -44,7 +44,7 @@ export default function AIStylist() {
     scrollToBottom();
   }, [messages]);
 
-  // Загрузка списка чатов (пока без user_id — добавим позже...)
+  // Загрузка списка чатов (пока без user_id — добавим позже)
   useEffect(() => {
     const loadConversations = async () => {
       try {
