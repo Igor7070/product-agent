@@ -41,17 +41,23 @@ export default function AIStylist() {
   };
 
   useEffect(() => {
+    console.log("[FRONTEND SESSION]", session);
+  }, [session]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   // === ХЕДЕРЫ С АВТОРИЗАЦИЕЙ ===
-  const getAuthHeaders = (): Record<string, string> => {
+  const getAuthHeaders = () => {
+    const headers: Record<string, string> = {};
     if (session?.user?.id) {
-      return {
-        'Authorization': `Bearer ${session.user.id}`,
-      };
+      headers['Authorization'] = `Bearer ${session.user.id}`;
+      console.log("[FRONTEND] Adding token for user:", session.user.id);
+    } else {
+      console.log("[FRONTEND] No session, sending without token");
     }
-    return {};
+    return headers;
   };
 
   // Загрузка списка чатов
