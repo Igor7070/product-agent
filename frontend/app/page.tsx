@@ -44,14 +44,14 @@ export default function AIStylist() {
     scrollToBottom();
   }, [messages]);
 
-  // === ИСПРАВЛЕННЫЕ ХЕДЕРЫ ===
+  // === ХЕДЕРЫ С АВТОРИЗАЦИЕЙ ===
   const getAuthHeaders = (): Record<string, string> => {
     if (session?.user?.id) {
       return {
         'Authorization': `Bearer ${session.user.id}`,
       };
     }
-    return {}; // пустой объект — TypeScript доволен
+    return {};
   };
 
   // Загрузка списка чатов
