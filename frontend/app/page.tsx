@@ -60,7 +60,7 @@ export default function AIStylist() {
     return headers;
   };
 
-  // Загрузка списка чатов
+  // Загрузка списка чатов.
   useEffect(() => {
     const loadConversations = async () => {
       try {
