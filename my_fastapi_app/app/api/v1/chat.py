@@ -30,6 +30,7 @@ async def chat_with_stylist(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user)   # ← Добавили
 ):
+    print(f"[DEBUG] chat_with_stylist called with user_id: {user_id}, conv_id: {conversation_id}")
     user_msg = message.strip()
 
     try:

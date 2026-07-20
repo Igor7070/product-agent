@@ -15,6 +15,7 @@ async def get_conversations(
     user_id: str = Depends(get_current_user)
 ):
     """Получить список чатов текущего пользователя"""
+    print(f"[DEBUG] get_conversations called with user_id: {user_id}")
     try:
         result = await db.execute(
             select(Conversation)
@@ -23,6 +24,8 @@ async def get_conversations(
             .order_by(desc(Conversation.updated_at))
         )
         convs = result.scalars().all()
+
+        print(f"[DEBUG] Found {len(convs)} conversations for user {user_id}")
         
         chat_list = []
         for c in convs:
