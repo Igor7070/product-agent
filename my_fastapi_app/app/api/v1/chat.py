@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
+from app.core.auth import get_current_user   # ← Добавили
 
-# Здесь НЕ должно быть prefix="/chat" — он уже добавляется в main.py
+# Здесь НЕ должно быть prefix="/chat"
 router = APIRouter(tags=["chat"])
 
 class ChatResponse(BaseModel):
@@ -26,9 +27,9 @@ async def chat_with_stylist(
     message: str = Form(""),
     conversation_id: str = Form("default"),
     files: List[UploadFile] = File(default=[]),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)   # ← Добавили
 ):
-    user_id = "default_user"
     user_msg = message.strip()
 
     try:
@@ -36,17 +37,20 @@ async def chat_with_stylist(
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный conversation_id")
 
-    # Получаем conversation
+    # Получаем conversation + проверяем владельца
     result = await db.execute(
-        select(Conversation).where(Conversation.id == conv_id)
+        select(Conversation).where(
+            Conversation.id == conv_id,
+            Conversation.user_id == user_id
+        )
     )
     conv = result.scalar_one_or_none()
 
     if not conv:
-        raise HTTPException(status_code=404, detail="Чат не найден")
+        raise HTTPException(status_code=404, detail="Чат не найден или не принадлежит вам")
 
     # === ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ ===
-    print(f"[DEBUG] Загружено состояние для чата {conv_id}: {conv.state}")
+    print(f"[DEBUG] Загружено состояние для чата {conv_id} пользователя {user_id}: {conv.state}")
 
     session = dict(conv.state) if conv.state else {"step": 0, "data": {}}
     saved_image_paths: List[str] = []
@@ -67,7 +71,7 @@ async def chat_with_stylist(
 
     print(f"[DEBUG] Текущий шаг перед обработкой: {step}")
 
-    # === ЛОГИКА ДИАЛОГА ===
+    # === ЛОГИКА ДИАЛОГА (оставил как было) ===
     if step == 0:
         name = user_msg if user_msg else "друг"
         data["name"] = name
@@ -122,7 +126,7 @@ async def chat_with_stylist(
     # Сохранение сообщений
     user_msg_db = ChatMessage(
         conversation_id=conv_id,
-        user_id=user_id,
+        user_id=user_id,           # ← Используем реального пользователя
         role="user",
         content=user_msg,
         images=saved_image_paths

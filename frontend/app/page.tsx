@@ -44,11 +44,23 @@ export default function AIStylist() {
     scrollToBottom();
   }, [messages]);
 
-  // Загрузка списка чатов (пока без user_id — добавим позже)
+  // === ИСПРАВЛЕННЫЕ ХЕДЕРЫ ===
+  const getAuthHeaders = (): Record<string, string> => {
+    if (session?.user?.id) {
+      return {
+        'Authorization': `Bearer ${session.user.id}`,
+      };
+    }
+    return {}; // пустой объект — TypeScript доволен
+  };
+
+  // Загрузка списка чатов
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        const res = await fetch(`${API_BASE}/conversations/`);
+        const res = await fetch(`${API_BASE}/conversations/`, {
+          headers: getAuthHeaders(),
+        });
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         setConversations(data);
@@ -57,7 +69,7 @@ export default function AIStylist() {
       }
     };
     loadConversations();
-  }, []);
+  }, [session]);
 
   // Восстановление последнего чата
   useEffect(() => {
@@ -86,7 +98,9 @@ export default function AIStylist() {
       setActiveConversationId(convId);
       localStorage.setItem('activeConversationId', convId.toString());
 
-      const res = await fetch(`${API_BASE}/conversations/${convId}`);
+      const res = await fetch(`${API_BASE}/conversations/${convId}`, {
+        headers: getAuthHeaders(),
+      });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
 
@@ -107,7 +121,10 @@ export default function AIStylist() {
 
   const createNewChat = async () => {
     try {
-      const res = await fetch(`${API_BASE}/conversations/`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/conversations/`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
       const newConv = await res.json();
       
       const newId = newConv.id;
@@ -132,7 +149,10 @@ export default function AIStylist() {
     if (!confirm("Удалить этот чат навсегда?")) return;
 
     try {
-      await fetch(`${API_BASE}/conversations/${convId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/conversations/${convId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
 
       setConversations(prev => prev.filter(c => c.id !== convId));
 
@@ -175,6 +195,7 @@ export default function AIStylist() {
     try {
       const response = await fetch(`${API_BASE}/chat/`, {
         method: 'POST',
+        headers: getAuthHeaders(),
         body: formData,
       });
 
@@ -284,7 +305,7 @@ export default function AIStylist() {
           </div>
         </div>
 
-        {/* Чат — остальная часть без изменений */}
+        {/* Чат */}
         <div className="flex-1 flex flex-col">
           <div className="p-6 border-b border-zinc-800 flex items-center gap-4 bg-zinc-950">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-pink-500">
