@@ -286,9 +286,9 @@ export default function AIStylist() {
             )}
           </div>
 
-          <div className="mt-auto">
-            <h3 className="uppercase text-xs tracking-widest text-zinc-500 mb-4">Что я умею</h3>
-            <ul className="space-y-4 text-sm">
+          <div className="mt-auto pt-4 flex-1 min-h-0 flex flex-col justify-end">
+            <h3 className="uppercase text-xs tracking-widest text-zinc-500 mb-3">Что я умею</h3>
+            <ul className="space-y-3 text-sm">
               <li className="flex items-center gap-3">🎨 Подобрать стиль под твою внешность</li>
               <li className="flex items-center gap-3">📸 Работать с твоими фото</li>
               <li className="flex items-center gap-3">💰 Учитывать твой бюджет</li>
@@ -297,7 +297,7 @@ export default function AIStylist() {
             </ul>
           </div>
 
-          <div className="mt-8 pt-6 border-t border-zinc-800">
+          <div className="mt-6 pt-6 border-t border-zinc-800 shrink-0">
             <button
               onClick={createNewChat}
               className="w-full bg-pink-600 hover:bg-pink-700 py-3 rounded-2xl font-medium mb-4 transition"
@@ -306,7 +306,7 @@ export default function AIStylist() {
             </button>
 
             <p className="text-xs uppercase tracking-widest text-zinc-500 mb-3">История чатов</p>
-            <div className="space-y-2 max-h-40 overflow-y-auto text-sm">
+            <div className="space-y-2 max-h-28 overflow-y-auto text-sm pr-1">
               {conversations.map(conv => (
                 <div 
                   key={conv.id} 
@@ -318,7 +318,7 @@ export default function AIStylist() {
                       : 'bg-zinc-800/50 hover:bg-zinc-800'
                   }`}
                 >
-                  {conv.title}
+                  <p className="truncate pr-4">{conv.title}</p>
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-zinc-400">⋮</div>
                 </div>
               ))}
