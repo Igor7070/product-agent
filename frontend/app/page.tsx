@@ -41,21 +41,17 @@ export default function AIStylist() {
   };
 
   useEffect(() => {
-    console.log("[FRONTEND SESSION]", session);
-  }, [session]);
-
-  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   // === ХЕДЕРЫ С АВТОРИЗАЦИЕЙ ===
   const getAuthHeaders = () => {
     const headers: Record<string, string> = {};
-    if (session?.user?.id) {
-      headers['Authorization'] = `Bearer ${session.user.id}`;
-      console.log("[FRONTEND] Adding token for user:", session.user.id);
+    if (session?.user?.idToken) {
+      headers['Authorization'] = `Bearer ${session.user.idToken}`;
+      console.log("[FRONTEND] Sending Google ID Token:", session.user.idToken.slice(0, 15) + "...");
     } else {
-      console.log("[FRONTEND] No session, sending without token");
+      console.log("[FRONTEND] No session or idToken, sending without token");
     }
     return headers;
   };

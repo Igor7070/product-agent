@@ -12,6 +12,8 @@ const handler = NextAuth({
     async jwt({ token, account, profile }) {
       if (account) {
         token.accessToken = account.access_token
+        // Сохраняем Google ID Token для валидации на FastAPI бэкенде
+        token.idToken = account.id_token
       }
       if (profile?.sub) {
         token.id = profile.sub
@@ -21,6 +23,8 @@ const handler = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
+        // Передаем idToken в session.user
+        session.user.idToken = token.idToken as string
       }
       return session
     },
