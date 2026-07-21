@@ -4,7 +4,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
-from app.core.auth import get_current_user   # ← Импорт
+from app.core.auth import get_current_user
 
 router = APIRouter(tags=["conversations"])
 
@@ -14,7 +14,7 @@ async def get_conversations(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
-    """Получить список чатов текущего пользователя"""
+    """Получить список чатов текущего пользователя (пропуская неначатые)"""
     print(f"[DEBUG] get_conversations called with user_id: {user_id}")
     try:
         result = await db.execute(
@@ -30,8 +30,13 @@ async def get_conversations(
         chat_list = []
         for c in convs:
             user_messages = [m for m in c.messages if m.role == "user"]
-            title = c.title
             
+            # Пропускаем чаты, в которых пользователь еще ничего не написал, 
+            # чтобы при F5 страница загружала последний реальный диалог
+            if not user_messages:
+                continue
+
+            title = c.title
             if title.startswith("Новый чат") and user_messages:
                 first_msg = user_messages[0].content.strip()
                 title = (first_msg[:35] + "...") if len(first_msg) > 35 else first_msg
@@ -57,7 +62,7 @@ async def create_conversation(
     """Создать новый чат для текущего пользователя"""
     try:
         conv = Conversation(
-            user_id=user_id,                    # ← Важно!
+            user_id=user_id,
             title="Новый чат с Анной",
             state={"step": 0, "data": {}}
         )
