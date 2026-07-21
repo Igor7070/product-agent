@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSession, signIn, signOut } from "next-auth/react";
 
 const API_BASE = 'https://perfect-flexibility-production-2fbc.up.railway.app';
@@ -45,7 +45,7 @@ export default function AIStylist() {
   }, [messages]);
 
   // === ХЕДЕРЫ С АВТОРИЗАЦИЕЙ ===
-  const getAuthHeaders = () => {
+  const getAuthHeaders = useCallback(() => {
     const headers: Record<string, string> = {};
     if (session?.user?.idToken) {
       headers['Authorization'] = `Bearer ${session.user.idToken}`;
@@ -54,48 +54,10 @@ export default function AIStylist() {
       console.log("[FRONTEND] No session or idToken, sending without token");
     }
     return headers;
-  };
-
-  // Загрузка списка чатов
-  useEffect(() => {
-    const loadConversations = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/conversations/`, {
-          headers: getAuthHeaders(),
-        });
-        if (!res.ok) throw new Error('Failed');
-        const data = await res.json();
-        setConversations(data);
-      } catch (error) {
-        console.error("Не удалось загрузить список чатов:", error);
-      }
-    };
-    loadConversations();
   }, [session]);
 
-  // Восстановление последнего чата
-  useEffect(() => {
-    const savedId = localStorage.getItem('activeConversationId');
-    if (savedId) {
-      const id = parseInt(savedId);
-      loadConversation(id);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (conversations.length > 0 && activeConversationId === null) {
-      const savedId = localStorage.getItem('activeConversationId');
-      if (savedId) {
-        const id = parseInt(savedId);
-        const exists = conversations.some(c => c.id === id);
-        loadConversation(exists ? id : conversations[0].id);
-      } else {
-        loadConversation(conversations[0].id);
-      }
-    }
-  }, [conversations]);
-
-  const loadConversation = async (convId: number) => {
+  // Загрузка конкретного чата
+  const loadConversation = useCallback(async (convId: number) => {
     try {
       setActiveConversationId(convId);
       localStorage.setItem('activeConversationId', convId.toString());
@@ -119,7 +81,47 @@ export default function AIStylist() {
       console.error("Не удалось загрузить чат:", error);
       setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
     }
-  };
+  }, [getAuthHeaders]);
+
+  // Единая загрузка списка чатов и восстановление активного чата без гонки состояний
+  useEffect(() => {
+    if (status === 'loading') return;
+
+    const initConversations = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/conversations/`, {
+          headers: getAuthHeaders(),
+        });
+        if (!res.ok) throw new Error('Failed');
+        const data: Conversation[] = await res.json();
+        setConversations(data);
+
+        const savedId = localStorage.getItem('activeConversationId');
+        let targetId: number | null = null;
+
+        if (savedId) {
+          const parsedId = parseInt(savedId);
+          if (data.some(c => c.id === parsedId)) {
+            targetId = parsedId;
+          }
+        }
+
+        if (!targetId && data.length > 0) {
+          targetId = data[0].id;
+        }
+
+        if (targetId) {
+          await loadConversation(targetId);
+        } else {
+          setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
+        }
+      } catch (error) {
+        console.error("Не удалось загрузить список чатов:", error);
+      }
+    };
+
+    initConversations();
+  }, [session, status, getAuthHeaders, loadConversation]);
 
   const createNewChat = async () => {
     try {
@@ -136,6 +138,8 @@ export default function AIStylist() {
       setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
       setInput('');
       setSelectedFiles([]);
+
+      setConversations(prev => [newConv, ...prev]);
     } catch (e) {
       console.error(e);
       alert("Не удалось создать новый чат");
