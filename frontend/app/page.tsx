@@ -83,6 +83,32 @@ export default function AIStylist() {
     }
   }, [getAuthHeaders]);
 
+  // Создание нового чата
+  const createNewChat = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/conversations/`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const newConv = await res.json();
+      
+      const newId = newConv.id;
+      setActiveConversationId(newId);
+      localStorage.setItem('activeConversationId', newId.toString());
+
+      setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
+      setInput('');
+      setSelectedFiles([]);
+
+      setConversations(prev => [newConv, ...prev]);
+      return newConv;
+    } catch (e) {
+      console.error(e);
+      alert("Не удалось создать новый чат");
+      return null;
+    }
+  }, [getAuthHeaders]);
+
   // Единая загрузка списка чатов и восстановление активного чата без гонки состояний
   useEffect(() => {
     if (status === 'loading') return;
@@ -113,7 +139,8 @@ export default function AIStylist() {
         if (targetId) {
           await loadConversation(targetId);
         } else {
-          setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
+          // Если у пользователя вообще нет чатов — создаём первый чат автоматически
+          await createNewChat();
         }
       } catch (error) {
         console.error("Не удалось загрузить список чатов:", error);
@@ -121,30 +148,7 @@ export default function AIStylist() {
     };
 
     initConversations();
-  }, [session, status, getAuthHeaders, loadConversation]);
-
-  const createNewChat = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/conversations/`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-      });
-      const newConv = await res.json();
-      
-      const newId = newConv.id;
-      setActiveConversationId(newId);
-      localStorage.setItem('activeConversationId', newId.toString());
-
-      setMessages([{ role: 'assistant', content: DEFAULT_WELCOME }]);
-      setInput('');
-      setSelectedFiles([]);
-
-      setConversations(prev => [newConv, ...prev]);
-    } catch (e) {
-      console.error(e);
-      alert("Не удалось создать новый чат");
-    }
-  };
+  }, [session, status, getAuthHeaders, loadConversation, createNewChat]);
 
   const handleContextMenu = (e: React.MouseEvent, convId: number) => {
     e.preventDefault();
@@ -179,7 +183,18 @@ export default function AIStylist() {
   }, []);
 
   const handleSend = async () => {
-    if (loading || (!input.trim() && selectedFiles.length === 0) || activeConversationId === null) return;
+    if (loading || (!input.trim() && selectedFiles.length === 0)) return;
+
+    // Если activeConversationId равен null, создаем новый чат перед отправкой
+    let currentConvId = activeConversationId;
+    if (currentConvId === null) {
+      const newConv = await createNewChat();
+      if (!newConv) return;
+      currentConvId = newConv.id;
+    }
+
+    // Дополнительная проверка, чтобы TypeScript точно знал, что currentConvId — это number
+    if (currentConvId === null) return;
 
     const userMessage: Message = { 
       role: 'user', 
@@ -194,7 +209,7 @@ export default function AIStylist() {
 
     const formData = new FormData();
     formData.append('message', currentInput || 'Отправляю фото');
-    formData.append('conversation_id', activeConversationId.toString());
+    formData.append('conversation_id', currentConvId.toString());
 
     selectedFiles.forEach(file => formData.append('files', file));
 
