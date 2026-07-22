@@ -1,16 +1,19 @@
+import os
+import shutil
+import base64
+from datetime import datetime
+from typing import List, Optional
+
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
-import shutil
-import os
-from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
 from app.core.auth import get_current_user
+from app.services.ai_agent import run_stylist_agent
 
-# Здесь НЕ должно быть prefix="/chat"
 router = APIRouter(tags=["chat"])
 
 class ChatResponse(BaseModel):
@@ -22,13 +25,19 @@ UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def encode_image_to_base64(file_path: str) -> str:
+    """Вспомогательная функция для перевода изображения в base64 для OpenAI Vision"""
+    with open(file_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
+
 @router.post("/")
 async def chat_with_stylist(
     message: str = Form(""),
     conversation_id: str = Form("default"),
     files: List[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)   # ← Добавили
+    user_id: str = Depends(get_current_user)
 ):
     print(f"[DEBUG] chat_with_stylist called with user_id: {user_id}, conv_id: {conversation_id}")
     user_msg = message.strip()
@@ -38,7 +47,7 @@ async def chat_with_stylist(
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный conversation_id")
 
-    # Получаем conversation + проверяем владельца
+    # 1. Проверяем существование диалога и права доступа
     result = await db.execute(
         select(Conversation).where(
             Conversation.id == conv_id,
@@ -50,11 +59,9 @@ async def chat_with_stylist(
     if not conv:
         raise HTTPException(status_code=404, detail="Чат не найден или не принадлежит вам")
 
-    # === ВОССТАНОВЛЕНИЕ СОСТОЯНИЯ ===
-    print(f"[DEBUG] Загружено состояние для чата {conv_id} пользователя {user_id}: {conv.state}")
-
-    session = dict(conv.state) if conv.state else {"step": 0, "data": {}}
+    # 2. Сохраняем загруженные файлы на диск
     saved_image_paths: List[str] = []
+    base64_images: List[str] = []
 
     if files:
         for file in files:
@@ -62,75 +69,60 @@ async def chat_with_stylist(
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{timestamp}_{file.filename}"
                 file_path = os.path.join(UPLOAD_DIR, filename)
+                
                 with open(file_path, "wb") as buffer:
                     shutil.copyfileobj(file.file, buffer)
+                
                 saved_image_paths.append(f"/uploads/{filename}")
+                
+                # Подготавливаем base64 для передачи в AI Vision
+                b64_str = encode_image_to_base64(file_path)
+                base64_images.append(b64_str)
 
-    step = session.get("step", 0)
-    data = session.get("data", {})
-    response = ""
+    # 3. Достаем историю сообщений из базы данных для формирования контекста
+    history_result = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.conversation_id == conv_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
+    db_messages = history_result.scalars().all()
 
-    print(f"[DEBUG] Текущий шаг перед обработкой: {step}")
+    # Формируем список сообщений в формате OpenAI API
+    messages_history = []
+    for msg in db_messages:
+        messages_history.append({
+            "role": msg.role,
+            "content": msg.content
+        })
 
-    # === ЛОГИКА ДИАЛОГА (оставил как было) ===
-    if step == 0:
-        name = user_msg if user_msg else "друг"
-        data["name"] = name
-        response = f"Приятно познакомиться, {name}! Давай начнём. Какой стиль одежды тебе ближе всего? (casual, smart casual, спортивный, элегантный, streetwear и т.д.)"
-        session["step"] = 1
-
-    elif step == 1:
-        data["preferred_style"] = user_msg
-        response = "Отлично! Какой у тебя примерно бюджет на одну вещь ($)?"
-        session["step"] = 2
-
-    elif step == 2:
-        data["budget"] = user_msg
-        response = "Поняла. Расскажи о своей фигуре: рост, размер одежды, особенности, что хочешь подчеркнуть или скрыть?"
-        session["step"] = 3
-
-    elif step == 3:
-        data["measurements"] = user_msg
-        response = "Спасибо! Есть любимые бренды или магазины?"
-        session["step"] = 4
-
-    elif step == 4:
-        data["brands"] = user_msg
-        response = "Отлично. Хочешь прислать фото лица/фигуры? (можно несколько)"
-        session["step"] = 5
-
-    elif step == 5:
-        if saved_image_paths:
-            response = f"Фото успешно загружено ({len(saved_image_paths)} шт.)! Спасибо."
-        elif any(word in (user_msg or "").lower() for word in ["пропустить", "нет", "skip", "не надо"]):
-            response = "Хорошо, продолжим без фото."
+    # 4. Формируем новое сообщение от пользователя (с поддержкой Vision для фото)
+    if base64_images:
+        user_content = []
+        if user_msg:
+            user_content.append({"type": "text", "text": user_msg})
         else:
-            response = "Жду твои фото!"
-        response += " Какие цвета ты особенно любишь носить, а какие стараешься избегать?"
-        session["step"] = 6
+            user_content.append({"type": "text", "text": "Оцени эти фото и учти их в подборе."})
 
-    elif step == 6:
-        data["colors"] = user_msg
-        name = data.get("name", "друг")
-        response = f"Спасибо, {name}! Я собрала всю информацию.\n\nГотов посмотреть рекомендации?"
-        session["step"] = 7
-
+        for b64 in base64_images:
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+            })
+        
+        messages_history.append({"role": "user", "content": user_content})
     else:
-        response = "Поняла. Что делаем дальше?"
+        messages_history.append({"role": "user", "content": user_msg if user_msg else "Привет!"})
 
-    # === СОХРАНЕНИЕ СОСТОЯНИЯ ===
-    conv.state = session
-    conv.updated_at = datetime.utcnow()
+    # 5. Вызываем AI-агента Анну
+    ai_response_text = await run_stylist_agent(messages_history)
 
-    print(f"[DEBUG] Сохраняем новое состояние: step={session.get('step')}")
-
-    # Сохранение сообщений
+    # 6. Сохраняем новое сообщение пользователя и ответ Анны в PostgreSQL
     user_msg_db = ChatMessage(
         conversation_id=conv_id,
-        user_id=user_id,           # ← Используем реального пользователя
+        user_id=user_id,
         role="user",
-        content=user_msg,
-        images=saved_image_paths
+        content=user_msg if user_msg else "[Прикреплено изображение]",
+        images=saved_image_paths if saved_image_paths else None
     )
     db.add(user_msg_db)
 
@@ -138,16 +130,19 @@ async def chat_with_stylist(
         conversation_id=conv_id,
         user_id=user_id,
         role="assistant",
-        content=response,
+        content=ai_response_text,
         images=None
     )
     db.add(assistant_msg_db)
 
-    await db.commit()
-    await db.refresh(conv)
+    # Обновляем время активности чата
+    conv.updated_at = datetime.utcnow()
 
+    await db.commit()
+
+    # 7. Возвращаем ответ клиенту
     return ChatResponse(
         role="assistant", 
-        content=response,
+        content=ai_response_text,
         images=saved_image_paths if saved_image_paths else None
     )
