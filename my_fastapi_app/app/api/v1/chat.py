@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.models.chat import Conversation, ChatMessage
-from app.core.auth import get_current_user   # ← Добавили
+from app.core.auth import get_current_user
 
 # Здесь НЕ должно быть prefix="/chat"
 router = APIRouter(tags=["chat"])
