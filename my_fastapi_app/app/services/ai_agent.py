@@ -3,8 +3,11 @@ import os
 from typing import List, Dict, Any
 from openai import AsyncOpenAI
 
-# Инициализация асинхронного клиента OpenAI
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Инициализация асинхронного клиента OpenAI через OpenRouter
+client = AsyncOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url="https://openrouter.ai/api/v1"  # Перенаправляем запросы на OpenRouter
+)
 
 SYSTEM_PROMPT = """
 Ты — Анна, профессиональный и невероятно дружелюбный AI-стилист. 
@@ -26,7 +29,7 @@ SYSTEM_PROMPT = """
 
 async def run_stylist_agent(messages_history: List[Dict[str, Any]]) -> str:
     """
-    Основная функция вызова OpenAI GPT-4o.
+    Основная функция вызова GPT-4o через OpenRouter API.
     Принимает историю диалога и возвращает текстовый ответ Анны.
     """
     # Собираем массив сообщений с системным промптом во главе
@@ -36,7 +39,7 @@ async def run_stylist_agent(messages_history: List[Dict[str, Any]]) -> str:
 
     try:
         response = await client.chat.completions.create(
-            model="gpt-4o",  # Используем флагманскую модель gpt-4o для идеальной работы с Vision и текстом
+            model="openai/gpt-4o",  # Полный идентификатор модели для OpenRouter
             messages=formatted_messages,
             temperature=0.7,
             max_tokens=600
@@ -45,5 +48,5 @@ async def run_stylist_agent(messages_history: List[Dict[str, Any]]) -> str:
         return response.choices[0].message.content
 
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
+        print(f"Error calling OpenAI API via OpenRouter: {e}")
         return "Ой, кажется, у меня возникла небольшая техническая заминка. Давай повторим через секунду?"
